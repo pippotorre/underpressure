@@ -1,5 +1,5 @@
 // Service worker: app shell in cache (cache-first), API mai in cache.
-const CACHE = 'underpressure-v1';
+const CACHE = 'underpressure-v2';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/ocr.js', './js/classify.js', './js/periods.js', './js/exporter.js', './js/info.js',

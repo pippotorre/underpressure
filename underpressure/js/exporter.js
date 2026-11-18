@@ -51,7 +51,7 @@ export function toJSON(list, settings) {
 }
 
 /** PDF per il medico: intestazione, medie, grafico, tabella. */
-export function toPDF(list, { name, periodLabel, health, chartImg }) {
+export function toPDF(list, { name, periodLabel, health, target, chartImg }) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const st = stats(list);
@@ -60,15 +60,20 @@ export function toPDF(list, { name, periodLabel, health, chartImg }) {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
   doc.text(`${name} · ${periodLabel} · strumento LAICA BM2301`, 14, 25);
   let y = 32;
-  if (health && (health.age || health.therapyName)) {
+  if (health && (health.age || health.birthYear || health.therapy)) {
     const bits = [];
-    if (health.age) bits.push(`età ${health.age}`);
+    const age = health.birthYear ? new Date().getFullYear() - health.birthYear : health.age;
+    if (age) bits.push(`età ${age}`);
     if (health.sex) bits.push(health.sex);
     if (health.therapy) bits.push('in terapia' + (health.therapyName ? `: ${health.therapyName}` : ''));
+    const cond = [['diabetes', 'diabete'], ['kidney', 'malattia renale'], ['coronary', 'malattia coronarica'], ['stroke', 'ictus/TIA'], ['heartFailure', 'scompenso'], ['afib', 'fibrillazione atriale']].filter(([k]) => health[k]).map(([, l]) => l);
+    if (cond.length) bits.push(cond.join(', '));
     doc.text(bits.join(' · '), 14, y); y += 6;
   }
+  if (target) { doc.text(`Obiettivo a domicilio: sotto ${target.sys}/${target.dia} mmHg (${target.source})`, 14, y); y += 6; }
   if (st) {
     doc.setFont('helvetica', 'bold'); doc.text(`Media: ${st.sys}/${st.dia} mmHg · polso ${st.pul}/min · ${st.n} misure`, 14, y); y += 6;
+    if (target) { const over = list.filter(m => m.sys >= target.sys || m.dia >= target.dia).length; doc.setFont('helvetica', 'normal'); doc.text(`Misure sopra l'obiettivo: ${over} su ${st.n} (${Math.round(over / st.n * 100)}%)`, 14, y); y += 6; }
     doc.setFont('helvetica', 'normal');
     const parts = [];
     if (st.mattino) parts.push(`mattino ${st.mattino.sys}/${st.mattino.dia} (${st.mattino.n})`);

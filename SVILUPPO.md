@@ -52,7 +52,8 @@ L'utente vede sempre i valori prima di salvare, può correggerli e può spostare
 - [x] Blocco del salvataggio con avviso se il profilo sul display è diverso da quello dell'app (con pulsante per passare al profilo giusto)
 - [x] Conferma manuale del profilo se il numero non si vede
 - [x] Correzione manuale dei valori, inserimento manuale senza foto
-- [x] 4 profili rinominabili, scheda salute per profilo (età, sesso, altezza, peso, terapia, diabete, reni, cuore, fumo, obiettivi del medico)
+- [x] 4 profili rinominabili, ciascuno con la sua scheda salute (pagina dedicata)
+- [x] Obiettivo personale di pressione calcolato dalla scheda salute e confronto di ogni misura e della media settimanale
 - [x] Momento (mattino/pomeriggio/sera), battito irregolare, note
 - [x] Diario con modifica ed eliminazione
 - [x] Grafici: questa settimana, settimana scorsa, questo mese, mese scorso, intero anno, tutto; medie mattino/sera
@@ -73,3 +74,6 @@ L'utente vede sempre i valori prima di salvare, può correggerli e può spostare
 - API PHP provate in locale con MariaDB: registrazione, verifica codice (errato/corretto), backup con 2 allegati, token non valido.
 - Su richiesta: tabelle con prefisso `underpressure_` (database condiviso `entratad77228`), file SQL dedicato, `config.example.php` con impostazioni email (`mail()` o SMTP). Tolta la pagina `setup.php`: la configurazione si compila offline e si carica a mano, così non resta una pagina di installazione esposta.
 - Aggiunto invio SMTP (SSL 465 o STARTTLS 587) senza librerie esterne; provato in locale con un server SMTP finto senza cifratura.
+- Scheda salute resa una pagina dedicata (`#salute`): prima era nascosta dentro la scheda del profilo e l'utente non la trovava. Si apre subito dopo la conferma dell'email e la home la propone finché non è compilata.
+- Dati raccolti: anno di nascita (l'età si aggiorna da sola), sesso, altezza e peso (IMC), terapia e farmaci, diabete, malattia renale, malattia coronarica, ictus/TIA, scompenso, fibrillazione atriale, fragilità, gravidanza, fumo, colesterolo, familiarità, obiettivo del medico.
+- Obiettivo per le misure a casa (orientativo, ESH 2023): sotto 130/80 sotto i 65 anni; sotto 135/80 tra 65 e 79 (sistolica non sotto 120 con terapia); sotto 145/85 oltre gli 80 o con fragilità (non sotto 125); 135/85 in gravidanza; l'obiettivo del medico ha la precedenza. Ogni misura mostra "Nel tuo obiettivo", "Sopra il tuo obiettivo" o "Sotto il tuo intervallo"; il PDF riporta obiettivo e percentuale di misure sopra.

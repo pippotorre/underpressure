@@ -1,6 +1,6 @@
 import { db } from './db.js';
 import { recognize } from './ocr.js';
-import { classify, alertsFor, personalTarget, slotOf } from './classify.js';
+import { classify, alertsFor, personalTarget, slotOf, compareToTarget, healthFilled, healthNotes, ageOf, bmiOf } from './classify.js';
 import { PERIODS, range, inRange, stats, fmtDate, fmtTime } from './periods.js';
 import { toCSV, fromCSV, toJSON, toPDF, deliver } from './exporter.js';
 import { INFO } from './info.js';
@@ -58,7 +58,7 @@ function render() {
   $$('.tabbar a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + r));
   $('#profilePill').textContent = pname(state.active);
   $('#profilePill').dataset.n = state.active;
-  const fn = { home: vHome, scan: vScan, salvata: vSaved, manuale: vManual, diario: vDiary, grafici: vCharts, esporta: vExport, profili: vProfiles, info: vInfo }[r] || vHome;
+  const fn = { home: vHome, scan: vScan, salvata: vSaved, salute: vHealth, manuale: vManual, diario: vDiary, grafici: vCharts, esporta: vExport, profili: vProfiles, info: vInfo }[r] || vHome;
   view().innerHTML = '';
   fn();
   view().focus({ preventScroll: true });
@@ -82,11 +82,13 @@ const ICON = {
 // ---------- componenti ----------
 function measureCard(m, { compact = false } = {}) {
   const c = classify(m.sys, m.dia);
+  const tg = compareToTarget(m, state.profiles[m.profile - 1]?.health || {});
   return `<button class="mcard${compact ? ' compact' : ''}" data-id="${m.id}" style="--cls:${c.color}">
     <span class="mtime">${compact ? fmtTime(m.ts) : fmtDate(m.ts) + ' · ' + fmtTime(m.ts)} · ${esc(m.slot)}</span>
     <span class="mval"><b>${m.sys}</b><span class="sep">/</span><b>${m.dia}</b> <small>mmHg</small></span>
     <span class="mpul">♥ ${m.pul}<small>/min</small></span>
     <span class="chip" style="--cls:${c.color}">${c.label}</span>
+    <span class="tgt ${tg.status}">${tg.label}</span>
     ${m.irregular ? '<span class="flag">battito irregolare</span>' : ''}
     ${m.note ? `<span class="mnote">${esc(m.note)}</span>` : ''}
   </button>`;
@@ -122,14 +124,18 @@ function vHome() {
       <div><span class="k">${wk.sys}/${wk.dia}</span><span class="l">media mmHg</span></div>
       <div><span class="k">${wk.pul}</span><span class="l">polso medio</span></div>
       <div><span class="k">${wk.n}</span><span class="l">misure</span></div></div>
-      <p class="muted">Il tuo obiettivo: sotto ${t.sys}/${t.dia} (${t.source}).</p>` : '<p class="empty">Ancora nessuna misura questa settimana.</p>'}
+      ${(() => { const c = compareToTarget(wk, state.profiles[state.active - 1].health); return `<p class="tgtline ${c.status}"><b>${c.label}</b> con la media: ${esc(c.detail)}.</p>`; })()}` : '<p class="empty">Ancora nessuna misura questa settimana.</p>'}
   </section>
+  ${healthFilled(state.profiles[state.active - 1].health)
+    ? `<section class="card soft"><h2>Il tuo obiettivo</h2><p>Sotto <b>${t.sys}/${t.dia}</b> mmHg (${esc(t.source)}).</p><button class="btn ghost" id="goHealth">Scheda salute</button></section>`
+    : `<section class="card soft prompt"><h2>Completa la scheda salute</h2><p>Con età e poche informazioni sulla salute di ${esc(pname(state.active))} l'app calcola l'obiettivo di pressione adatto e confronta ogni misura. Per ora usa il valore generale ${t.sys}/${t.dia}.</p><button class="btn primary" id="goHealth">Compila la scheda</button></section>`}
   ${backupReminder()}`;
   $$('.pchip').forEach(b => b.addEventListener('click', async () => { state.active = +b.dataset.p; await db.set('active', state.active); render(); }));
   $('#shoot').addEventListener('click', () => $('#photoInput').click());
   $('#manual').addEventListener('click', () => go('manuale'));
   $$('.mcard').forEach(b => b.addEventListener('click', () => editMeasurement(+b.dataset.id)));
   $('#goBackup')?.addEventListener('click', () => go('esporta'));
+  $('#goHealth')?.addEventListener('click', () => { state.healthProfile = state.active; go('salute'); });
 }
 
 function backupReminder() {
@@ -384,7 +390,7 @@ function vCharts() {
     </div>
     <div class="chartbox"><canvas id="bpChart" aria-label="Andamento di sistolica e diastolica"></canvas></div>
     <div class="chartbox small"><canvas id="pulChart" aria-label="Andamento delle pulsazioni"></canvas></div>
-    <p class="muted">Linea tratteggiata: il tuo obiettivo ${t.sys}/${t.dia}.</p>` : '<p class="empty">Nessuna misura in questo periodo.</p>'}
+    <p class="muted">Linee tratteggiate: il tuo obiettivo ${t.sys}/${t.dia} (${esc(t.source)}).</p>` : '<p class="empty">Nessuna misura in questo periodo.</p>'}
   </section>`;
   $$('.periods .pchip').forEach(b => b.onclick = () => { state.period = b.dataset.k; render(); });
   if (st) drawCharts(list, t);
@@ -500,7 +506,7 @@ async function doExport(f) {
   for (const n of profilesToDo) {
     const sub = list.filter(m => m.profile === n);
     const chartImg = await offscreenChart(sub);
-    blobs.push(toPDF(sub, { name: pname(n), periodLabel, health: state.profiles[n - 1].health, chartImg }));
+    blobs.push(toPDF(sub, { name: pname(n), periodLabel, health: state.profiles[n - 1].health, target: personalTarget(state.profiles[n - 1].health), chartImg }));
   }
   for (const [i, b] of blobs.entries()) await deliver(b, `pressione-${pname(profilesToDo[i]).replace(/\W+/g, '_')}-${stamp()}.pdf`, { share: blobs.length === 1 });
 }
@@ -557,7 +563,7 @@ async function restore(e) {
 function vProfiles() {
   const acc = state.account;
   view().innerHTML = `
-  <section class="card"><h2>Profili</h2><p class="muted">Ogni profilo corrisponde a una zona di memoria del BM2301 (omino 1-4). Tocca un profilo per renderlo attivo.</p>
+  <section class="card"><h2>Profili</h2><p class="muted">Ogni profilo corrisponde a una zona di memoria del BM2301 (omino 1-4) e ha la sua scheda salute.</p>
   ${[1, 2, 3, 4].map(n => healthCard(n)).join('')}</section>
   <section class="card" id="account">
     <h2>Registrazione</h2>
@@ -573,12 +579,12 @@ function vProfiles() {
   </section>`;
   $$('.hcard').forEach(card => {
     const n = +card.dataset.n;
-    $('.setActive', card).onclick = async () => { state.active = n; await db.set('active', n); render(); };
+    $('.setActive', card)?.addEventListener('click', async () => { state.active = n; await db.set('active', n); render(); });
+    $('.openHealth', card).onclick = () => { state.healthProfile = n; go('salute'); };
     $('form', card).addEventListener('submit', async e => {
-      e.preventDefault(); const f = e.target;
-      const h = { age: +f.age.value || null, sex: f.sex.value, height: +f.height.value || null, weight: +f.weight.value || null, therapy: f.therapy.checked, therapyName: f.therapyName.value.trim(), diabetes: f.diabetes.checked, kidney: f.kidney.checked, heart: f.heart.checked, smoker: f.smoker.checked, targetSys: +f.targetSys.value || null, targetDia: +f.targetDia.value || null };
-      state.profiles[n - 1] = { name: f.pname.value.trim() || `Profilo ${n}`, health: h };
-      await db.set('profiles', state.profiles); toast('Profilo salvato', 'ok'); render();
+      e.preventDefault();
+      state.profiles[n - 1] = { ...state.profiles[n - 1], name: e.target.pname.value.trim() || `Profilo ${n}` };
+      await db.set('profiles', state.profiles); toast('Nome salvato', 'ok'); render();
     });
   });
   $('#regForm')?.addEventListener('submit', async e => {
@@ -589,7 +595,7 @@ function vProfiles() {
   });
   $('#verForm')?.addEventListener('submit', async e => {
     e.preventDefault();
-    try { const r = await api('verify.php', { email: state.account.email, code: e.target.code.value.trim() }); state.account = { name: state.account.name, email: state.account.email, token: r.token }; await db.set('account', state.account); toast('Email confermata', 'ok'); render(); }
+    try { const r = await api('verify.php', { email: state.account.email, code: e.target.code.value.trim() }); state.account = { name: state.account.name, email: state.account.email, token: r.token }; await db.set('account', state.account); toast('Email confermata. Ora compila la scheda salute', 'ok'); state.healthProfile = state.active; go('salute'); }
     catch (err) { toast(err.message, 'warn'); }
   });
   $('#restartReg')?.addEventListener('click', async () => { state.account = null; await db.set('account', null); render(); });
@@ -597,30 +603,82 @@ function vProfiles() {
 }
 
 function healthCard(n) {
-  const p = state.profiles[n - 1], h = p.health || {}, on = n === state.active;
-  const ck = (k, label) => `<label class="check"><input type="checkbox" name="${k}" ${h[k] ? 'checked' : ''}> ${label}</label>`;
-  return `<details class="hcard${on ? ' on' : ''}" data-n="${n}">
-    <summary><i class="pico p${n}"></i><span class="pn">${esc(p.name)}</span><span class="badge">omino ${n}</span>${on ? '<span class="chip on">attivo</span>' : ''}</summary>
-    <form class="stack" novalidate>
-      <button type="button" class="btn ghost setActive" ${on ? 'disabled' : ''}>${on ? 'Profilo attivo' : 'Usa questo profilo'}</button>
-      <label class="field"><span>Nome del profilo</span><input name="pname" maxlength="30" value="${esc(p.name)}"></label>
-      <h3>Scheda salute <small>(facoltativa, resta sul telefono)</small></h3>
-      <div class="grid2">
-        <label class="field"><span>Età</span><input name="age" type="number" inputmode="numeric" min="18" max="110" value="${h.age ?? ''}"></label>
-        <label class="field"><span>Sesso</span><select name="sex"><option value="">—</option><option ${h.sex === 'donna' ? 'selected' : ''}>donna</option><option ${h.sex === 'uomo' ? 'selected' : ''}>uomo</option></select></label>
-        <label class="field"><span>Altezza (cm)</span><input name="height" type="number" inputmode="numeric" min="100" max="230" value="${h.height ?? ''}"></label>
-        <label class="field"><span>Peso (kg)</span><input name="weight" type="number" inputmode="decimal" min="30" max="250" value="${h.weight ?? ''}"></label>
-      </div>
-      ${ck('therapy', 'In terapia per la pressione')}
-      <label class="field"><span>Farmaci (facoltativo)</span><input name="therapyName" maxlength="120" value="${esc(h.therapyName || '')}"></label>
-      ${ck('diabetes', 'Diabete')}${ck('kidney', 'Malattia renale')}${ck('heart', 'Malattia cardiaca o ictus pregresso')}${ck('smoker', 'Fumatore')}
-      <div class="grid2">
-        <label class="field"><span>Obiettivo sistolica dal medico</span><input name="targetSys" type="number" inputmode="numeric" min="90" max="180" value="${h.targetSys ?? ''}"></label>
-        <label class="field"><span>Obiettivo diastolica dal medico</span><input name="targetDia" type="number" inputmode="numeric" min="50" max="110" value="${h.targetDia ?? ''}"></label>
-      </div>
-      ${h.height && h.weight ? `<p class="muted">Indice di massa corporea: ${(h.weight / (h.height / 100) ** 2).toFixed(1)}</p>` : ''}
-      <button class="btn primary">Salva profilo</button>
-    </form></details>`;
+  const p = state.profiles[n - 1], h = p.health || {}, on = n === state.active, t = personalTarget(h);
+  return `<div class="hcard${on ? ' on' : ''}" data-n="${n}">
+    <div class="hhead"><i class="pico p${n}"></i><span class="pn">${esc(p.name)}</span><span class="badge">omino ${n}</span>${on ? '<span class="chip on">attivo</span>' : ''}</div>
+    <form class="stack nameform" novalidate>
+      <label class="field"><span>Nome del profilo</span><div class="inline"><input name="pname" maxlength="30" value="${esc(p.name)}"><button class="btn">Salva</button></div></label>
+    </form>
+    <p class="muted">${healthFilled(h) ? `Obiettivo: sotto ${t.sys}/${t.dia} (${esc(t.source)})` : 'Scheda salute da compilare'}</p>
+    <div class="row"><button type="button" class="btn ${healthFilled(h) ? 'ghost' : 'primary'} openHealth">Scheda salute</button>${on ? '' : '<button type="button" class="btn ghost setActive">Usa questo profilo</button>'}</div>
+  </div>`;
+}
+
+// ---------- SCHEDA SALUTE ----------
+function vHealth() {
+  const n = state.healthProfile || state.active, p = state.profiles[n - 1], h = p.health || {};
+  const yr = new Date().getFullYear();
+  const ck = (k, label, hint = '') => `<label class="check"><input type="checkbox" name="${k}" ${h[k] ? 'checked' : ''}><span>${label}${hint ? `<small>${hint}</small>` : ''}</span></label>`;
+  view().innerHTML = `
+  <form class="card stack" id="healthForm" novalidate>
+    <div class="head"><h2>Scheda salute</h2><select id="hp" aria-label="Profilo">${[1, 2, 3, 4].map(i => `<option value="${i}" ${i === n ? 'selected' : ''}>${esc(pname(i))}</option>`).join('')}</select></div>
+    <p class="muted">Servono per calcolare l'obiettivo di pressione adatto a ${esc(p.name)}. Restano solo su questo telefono e finiscono nel backup.</p>
+    <h3>Dati personali</h3>
+    <div class="grid2">
+      <label class="field"><span>Anno di nascita</span><input name="birthYear" type="number" inputmode="numeric" min="${yr - 110}" max="${yr - 18}" value="${h.birthYear ?? (h.age ? yr - h.age : '')}"></label>
+      <label class="field"><span>Sesso</span><select name="sex"><option value="">—</option><option ${h.sex === 'donna' ? 'selected' : ''}>donna</option><option ${h.sex === 'uomo' ? 'selected' : ''}>uomo</option></select></label>
+      <label class="field"><span>Altezza (cm)</span><input name="height" type="number" inputmode="numeric" min="100" max="230" value="${h.height ?? ''}"></label>
+      <label class="field"><span>Peso (kg)</span><input name="weight" type="number" inputmode="decimal" min="30" max="250" step="0.1" value="${h.weight ?? ''}"></label>
+    </div>
+    <h3>Terapia</h3>
+    ${ck('therapy', 'Prendo farmaci per la pressione')}
+    <label class="field"><span>Quali farmaci (facoltativo)</span><input name="therapyName" maxlength="120" value="${esc(h.therapyName || '')}" placeholder="Es. ramipril 5 mg al mattino"></label>
+    <h3>Condizioni che cambiano l'obiettivo</h3>
+    ${ck('diabetes', 'Diabete')}
+    ${ck('kidney', 'Malattia renale cronica')}
+    ${ck('coronary', 'Infarto, angina o malattia coronarica')}
+    ${ck('stroke', 'Ictus o TIA (mini-ictus)')}
+    ${ck('heartFailure', 'Scompenso cardiaco')}
+    ${ck('afib', 'Fibrillazione atriale', 'Le misure automatiche sono meno precise: l\'app ti consiglierà 3 misure di fila.')}
+    ${ck('frail', 'Fragilità o difficoltà a camminare', 'Si evitano pressioni troppo basse per il rischio di cadute.')}
+    ${h.sex === 'donna' ? ck('pregnancy', 'In gravidanza') : ''}
+    <h3>Fattori di rischio</h3>
+    ${ck('smoker', 'Fumo')}
+    ${ck('cholesterol', 'Colesterolo alto')}
+    ${ck('family', 'Familiari stretti con infarto o ictus prima dei 60 anni')}
+    <h3>Indicazioni del medico</h3>
+    <p class="muted">Se il medico ti ha dato un obiettivo preciso, inseriscilo: ha la precedenza sul calcolo dell'app.</p>
+    <div class="grid2">
+      <label class="field"><span>Sistolica sotto</span><input name="targetSys" type="number" inputmode="numeric" min="100" max="180" value="${h.targetSys ?? ''}"></label>
+      <label class="field"><span>Diastolica sotto</span><input name="targetDia" type="number" inputmode="numeric" min="60" max="110" value="${h.targetDia ?? ''}"></label>
+    </div>
+    <div id="targetBox"></div>
+    <button class="btn primary big">Salva la scheda</button>
+  </form>`;
+  const f = $('#healthForm');
+  const read = () => ({
+    birthYear: +f.birthYear.value || null, sex: f.sex.value, height: +f.height.value || null, weight: +f.weight.value || null,
+    therapy: f.therapy.checked, therapyName: f.therapyName.value.trim(),
+    ...Object.fromEntries(['diabetes', 'kidney', 'coronary', 'stroke', 'heartFailure', 'afib', 'frail', 'smoker', 'cholesterol', 'family'].map(k => [k, f[k].checked])),
+    pregnancy: f.pregnancy ? f.pregnancy.checked : false,
+    targetSys: +f.targetSys.value || null, targetDia: +f.targetDia.value || null,
+  });
+  const preview = () => {
+    const hh = read(), t = personalTarget(hh), notes = healthNotes(hh), bmi = bmiOf(hh), age = ageOf(hh);
+    $('#targetBox').innerHTML = `<div class="target">
+      <p class="eyebrow">Obiettivo per le misure a casa</p>
+      <p class="tval">sotto <b>${t.sys}/${t.dia}</b> mmHg${t.minSys ? ` <small>· sistolica non sotto ${t.minSys}</small>` : ''}</p>
+      <p class="muted">${age ? `${age} anni · ` : ''}${bmi ? `IMC ${bmi} · ` : ''}${esc(t.source)}</p>
+      <ul>${t.reasons.concat(notes).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      <p class="muted">Valori orientativi dalle linee guida europee ESH 2023: non sostituiscono il parere del medico.</p></div>`;
+  };
+  f.addEventListener('input', preview); preview();
+  $('#hp').onchange = e => { state.healthProfile = +e.target.value; render(); };
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    state.profiles[n - 1] = { ...p, health: read() };
+    await db.set('profiles', state.profiles); toast('Scheda salute salvata', 'ok'); go('home');
+  });
 }
 
 async function api(path, body) {
