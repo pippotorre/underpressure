@@ -109,8 +109,34 @@ const SLANT = 0.12; // le cifre del BM2301 sono leggermente inclinate a destra
 
 function percentile(arr, p) { const a = Float32Array.from(arr).sort(); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; }
 
+/** Compensa riflessi e ombre: divide ogni pixel per lo sfondo locale.
+ *  Lo sfondo è un percentile alto per blocchi (i segmenti sono minoranza), poi mediana tra blocchi vicini. */
+function flatten(w, B = 12, P = 0.8, R = 2) {
+  const { W, H } = w, bw = Math.ceil(W / B), bh = Math.ceil(H / B), blk = new Float32Array(bw * bh);
+  for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+    const v = [];
+    for (let y = by * B; y < Math.min(H, by * B + B); y++) for (let x = bx * B; x < Math.min(W, bx * B + B); x++) v.push(w.g[y * W + x]);
+    v.sort((a, b) => a - b); blk[by * bw + bx] = v[Math.floor(P * (v.length - 1))];
+  }
+  const med = new Float32Array(bw * bh);
+  for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+    const v = [];
+    for (let y = Math.max(0, by - R); y <= Math.min(bh - 1, by + R); y++) for (let x = Math.max(0, bx - R); x <= Math.min(bw - 1, bx + R); x++) v.push(blk[y * bw + x]);
+    v.sort((a, b) => a - b); med[by * bw + bx] = v[Math.floor(0.75 * (v.length - 1))];
+  }
+  const g = new Float32Array(w.g.length);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const fx = Math.min(bw - 1.001, Math.max(0, x / B - 0.5)), fy = Math.min(bh - 1.001, Math.max(0, y / B - 0.5));
+    const x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0, x1 = Math.min(bw - 1, x0 + 1), y1 = Math.min(bh - 1, y0 + 1);
+    const bg = (med[y0 * bw + x0] * (1 - ax) + med[y0 * bw + x1] * ax) * (1 - ay) + (med[y1 * bw + x0] * (1 - ax) + med[y1 * bw + x1] * ax) * ay;
+    g[y * W + x] = Math.min(255, 200 * w.g[y * W + x] / Math.max(20, bg));
+  }
+  return { ...w, g };
+}
+
 /** Binarizza il display raddrizzato e cancella la cornice scura ai bordi. */
-function binarize(w) {
+function binarize(w, flat = false) {
+  if (flat) w = flatten(w);
   const bg = percentile(w.g, 0.6), dark = percentile(w.g, 0.02), contrast = bg - dark;
   const thr = bg - Math.max(22, contrast * 0.45);
   const { W, H } = w, m = new Uint8Array(W * H);
@@ -181,25 +207,31 @@ function readNumber(bin, rect, expH, geo = { pitch: 0.65, full: 0.56, slant: SLA
   const SL = geo.slant ?? SLANT;
   const b = sub(bin, ...rect);
   let comps = components(b.m, b.W, b.H, 12);
+  // residui sottili della cornice sul bordo destro: li tolgo prima di misurare l'altezza delle cifre
+  comps = comps.filter(c => !(c.x1 >= b.W - 8 && c.x1 - c.x0 < expH * 0.08));
   const maxH = Math.max(0, ...comps.map(c => c.y1 - c.y0 + 1));
   if (maxH < expH * 0.45) return { value: null, reason: 'empty' };
   const tall = comps.filter(c => c.y1 - c.y0 + 1 > maxH * 0.6);
-  const top = Math.min(...tall.map(c => c.y0));
-  const ends = comps.filter(c => c.y0 >= top - 3 && c.y1 <= top + expH * 1.12).map(c => c.y1);
+  let top = Math.min(...tall.map(c => c.y0));
+  // il segmento orizzontale in alto (a) può essere staccato dai verticali: lo includo
+  const tx0 = Math.min(...tall.map(c => c.x0)), tx1 = Math.max(...tall.map(c => c.x1));
+  const aSeg = comps.filter(c => c.y0 < top && c.y0 >= top - expH * 0.08 && c.y1 <= top + expH * 0.25 && c.x1 - c.x0 + 1 >= expH * 0.2 && c.x0 >= tx0 - expH * 0.05 && c.x1 <= tx1 + expH * 0.15);
+  if (aSeg.length) top = Math.min(...aSeg.map(c => c.y0));
+  const ends = comps.filter(c => c.y0 >= top - 3 && c.y1 <= top + expH * 1.12 && c.y1 - c.y0 + 1 >= expH * 0.06).map(c => c.y1);
   let digitH = Math.max(...ends) - top + 1;
   if (!(digitH > expH * 0.8 && digitH < expH * 1.15)) digitH = expH;
   const bot = top + digitH - 1;
   comps = comps.filter(c => c.y1 >= top - 3 && c.y0 <= bot + 3 && c.x1 - c.x0 + 1 >= 3);
   if (!comps.length) return { value: null, reason: 'empty' };
   // scarto i residui della cornice sul bordo destro (strisce sottili)
-  comps = comps.filter(c => !(c.x1 >= b.W - 3 && c.x1 - c.x0 < digitH * 0.08));
+  comps = comps.filter(c => !(c.x1 >= b.W - 8 && c.x1 - c.x0 < digitH * 0.08));
   if (!comps.length) return { value: null, reason: 'empty' };
   const col = new Uint8Array(b.W);
   for (const c of comps) for (let x = c.x0; x <= c.x1; x++) col[x] = 1;
   const extent = (x0, x1) => { let e0 = -1, e1 = -1; for (let x = Math.max(0, Math.round(x0)); x <= Math.min(b.W - 1, Math.round(x1)); x++) if (col[x]) { if (e0 < 0) e0 = x; e1 = x; } return e0 < 0 ? null : [e0, e1]; };
   const R = Math.max(...comps.filter(c => c.y1 - c.y0 + 1 > digitH * 0.3).map(c => c.x1));
   if (!Number.isFinite(R)) return { value: null, reason: 'empty' };
-  const pitch = digitH * geo.pitch, fullW = digitH * geo.full, cw = fullW - SL * digitH * 0.8;
+  const sx = bin.sx || 1, pitch = digitH * geo.pitch * sx, fullW = digitH * geo.full * sx, cw = fullW - SL * digitH * 0.8;
   const sample = (mid) => {
     const on = {};
     for (const [sk, [sx, sy]] of Object.entries(SEG)) {
@@ -301,14 +333,34 @@ export function recognize(img, corners) {
   if (globalThis.__pts) globalThis.__bin = null;
   const lcd = corners ? { corners, ok: true, candidates: [{ corners }] } : detectLCD(img);
   if (!lcd.ok) return { ok: false, error: 'display', lcd };
-  const bins = lcd.candidates.slice(0, 3).map(c => binarize(warp(img, c.corners))).filter(b => b.contrast >= 35);
+  const cands = lcd.candidates.slice(0, 3);
+  const mk = (flat, sx) => cands.map(c => Object.assign(binarize(warp(img, c.corners), flat), { sx })).filter(b => b.contrast >= 35);
+  const bins = mk(false, 1);
   if (!bins.length) return { ok: false, error: 'contrast', lcd };
-  if (globalThis.__pts) globalThis.__bin = bins[0];
+  const f = readFields(bins);
+  let r = finish(f, lcd);
+  // riflessi, ombre o foto un po' di sbieco: riprovo compensando lo sfondo locale
+  // e con cifre più strette (display schiacciato in larghezza dalla prospettiva);
+  // il secondo tentativo ha la precedenza, il primo copre i valori che il secondo non legge
+  if (!r.ok && r.error !== 'incomplete') {
+    const f2 = readFields([...mk(true, 1), ...mk(true, 0.9), ...mk(false, 0.9)]);
+    const best = k => f2[k].value != null ? f2[k] : f[k];
+    const r2 = finish({ sys: best('sys'), dia: best('dia'), pul: best('pul'), prof: f.prof.profile ? f.prof : f2.prof }, lcd);
+    if (r2.ok) r = r2;
+  }
+  return r;
+}
+
+function readFields(bins) {
+  if (globalThis.__pts) { globalThis.__bin = bins[0]; globalThis.__pts.length = 0; }
   const sys = vote(bins, [0.28, 0.0, 1, 0.34], 140);
   const dia = vote(bins, [0.28, 0.42, 1, 0.78], 135);
   const pul = vote(bins, [0.6, 0.78, 1, 1], 92);
   const sysBox = readNumber(bins[0], [0.28, 0.0, 1, 0.34], 140).box;
-  const prof = readProfile(bins[0], sysBox);
+  return { sys, dia, pul, prof: readProfile(bins[0], sysBox) };
+}
+
+function finish({ sys, dia, pul, prof }, lcd) {
   const res = { lcd, sys: sys.value, dia: dia.value, pul: pul.value, profile: prof.profile, detail: { sys, dia, pul, prof } };
   if (sys.reason !== 'empty' && dia.reason === 'empty' && pul.reason === 'empty') return { ...res, ok: false, error: 'incomplete' };
   if (sys.value == null || dia.value == null || pul.value == null) return { ...res, ok: false, error: 'unreadable' };
