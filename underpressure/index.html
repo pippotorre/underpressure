@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UnderPressure</title>
+<meta name="description" content="Diario della pressione: fotografa il display del LAICA BM2301 e registra le misure.">
+<meta name="theme-color" content="#F3F7F7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="UnderPressure">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="stylesheet" href="./css/app.css">
+<script src="./vendor/chart.umd.min.js" defer></script>
+<script src="./vendor/jspdf.umd.min.js" defer></script>
+<script src="./vendor/jspdf.plugin.autotable.min.js" defer></script>
+<script type="module" src="./js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <a href="#home" class="brand"><img src="./icons/logo.svg" alt="" width="34" height="34"><span>UnderPressure</span></a>
+  <button id="profilePill" class="ppill" aria-label="Profilo attivo, tocca per gestire i profili">Profilo 1</button>
+  <button id="themeToggle" class="iconbtn" aria-label="Cambia tema"></button>
+</header>
+<div id="updateBar" class="updatebar" hidden><span>Nuova versione disponibile</span><button id="updateBtn" class="btn small">Aggiorna</button></div>
+<main id="view" tabindex="-1"></main>
+<nav class="tabbar" aria-label="Sezioni">
+  <a href="#home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Home</span></a>
+  <a href="#diario"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM6 3v18M9.5 8h5M9.5 12h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><span>Diario</span></a>
+  <a href="#grafici"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M5 15l4-5 4 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><span>Grafici</span></a>
+  <a href="#esporta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><span>Esporta</span></a>
+  <a href="#info"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5M12 8v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Info</span></a>
+</nav>
+<input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+<dialog id="sheet" class="sheet"></dialog>
+<div id="toasts" aria-live="polite"></div>
+<noscript>UnderPressure ha bisogno di JavaScript.</noscript>
+</body>
+</html>
