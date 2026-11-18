@@ -6,7 +6,7 @@ $token = (string)($in['token'] ?? '');
 if (!preg_match('/^[a-f0-9]{64}$/', $token)) fail('Accesso non valido: registrati di nuovo.', 401);
 
 $pdo = db();
-$st = $pdo->prepare('SELECT * FROM up_users WHERE token_hash = ? AND verified = 1');
+$st = $pdo->prepare('SELECT * FROM underpressure_users WHERE token_hash = ? AND verified = 1');
 $st->execute([hash_token($token)]);
 $u = $st->fetch();
 if (!$u) fail('Accesso non valido: registrati di nuovo.', 401);
@@ -30,5 +30,5 @@ $ok = send_mail($u['email'], 'Backup diario UnderPressure ' . date('d/m/Y'), $te
     ['name' => "underpressure-$date.csv", 'type' => 'text/csv; charset=UTF-8', 'data' => $csv],
 ]);
 if (!$ok) fail('Non riesco a inviare l\'email. Riprova più tardi.', 500);
-$pdo->prepare('UPDATE up_users SET backup_day = ?, backup_count = ?, last_backup_at = NOW() WHERE id = ?')->execute([$today, $count + 1, $u['id']]);
+$pdo->prepare('UPDATE underpressure_users SET backup_day = ?, backup_count = ?, last_backup_at = NOW() WHERE id = ?')->execute([$today, $count + 1, $u['id']]);
 out(['message' => 'Backup inviato a ' . $u['email']]);

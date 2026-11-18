@@ -11,9 +11,11 @@ PWA per tenere il diario della pressione misurata con il **LAICA BM2301**: si fo
 
 ## Installazione su Tophost
 
-1. Esegui `./build-zip.sh` (oppure usa lo zip già pronto) e carica `underpressure.zip` dal file manager di Tophost nella cartella principale del sito, poi estrailo.
-2. Crea un database MySQL dal pannello Tophost.
-3. Apri `https://tuodominio.it/underpressure/setup.php`, inserisci i dati del database e l'indirizzo mittente. La pagina crea la tabella e il file `api/config.php`, poi si disattiva.
+1. **Database**: da phpMyAdmin apri il database `entratad77228` e importa [`sql/entratad77228.sql`](sql/entratad77228.sql). Crea la tabella `underpressure_users` (tutte le tabelle dell'app hanno il prefisso `underpressure_`, perché il database è condiviso).
+2. **Configurazione**: copia `underpressure/api/config.example.php` come `config.php`, compilalo (database, mittente, modalità di invio `mail` o `smtp`) e tienilo da parte.
+3. **File**: carica `underpressure.zip` dal file manager di Tophost nella cartella principale del sito ed estrailo. Poi carica il tuo `config.php` in `underpressure/api/`. Il file `.htaccess` di quella cartella ne impedisce la lettura dal web.
 4. Apri `https://tuodominio.it/underpressure/` dal telefono e aggiungila alla schermata Home.
+
+Per gli aggiornamenti basta ricaricare lo zip: non contiene `config.php`, quindi la configurazione resta.
 
 Il diario di sviluppo è in [SVILUPPO.md](SVILUPPO.md).

@@ -7,7 +7,7 @@ $name = mb_substr(trim(strip_tags((string)($in['name'] ?? ''))), 0, 60);
 if ($name === '') fail('Inserisci il tuo nome.');
 
 $pdo = db();
-$st = $pdo->prepare('SELECT * FROM up_users WHERE email = ?');
+$st = $pdo->prepare('SELECT * FROM underpressure_users WHERE email = ?');
 $st->execute([$email]);
 $u = $st->fetch();
 
@@ -23,10 +23,10 @@ $expires = $now + 1800;
 if ($u) {
     $window = ($u['codes_window'] !== null && $now - (int)$u['codes_window'] < 3600) ? (int)$u['codes_window'] : $now;
     $sent = $window === (int)$u['codes_window'] ? (int)$u['codes_sent'] + 1 : 1;
-    $pdo->prepare('UPDATE up_users SET name = ?, code_hash = ?, code_expires = ?, code_attempts = 0, codes_window = ?, codes_sent = ? WHERE id = ?')
+    $pdo->prepare('UPDATE underpressure_users SET name = ?, code_hash = ?, code_expires = ?, code_attempts = 0, codes_window = ?, codes_sent = ? WHERE id = ?')
         ->execute([$name, $codeHash, $expires, $window, $sent, $u['id']]);
 } else {
-    $pdo->prepare('INSERT INTO up_users (name, email, code_hash, code_expires, code_attempts, codes_window, codes_sent, created_at) VALUES (?, ?, ?, ?, 0, ?, 1, NOW())')
+    $pdo->prepare('INSERT INTO underpressure_users (name, email, code_hash, code_expires, code_attempts, codes_window, codes_sent, created_at) VALUES (?, ?, ?, ?, 0, ?, 1, NOW())')
         ->execute([$name, $email, $codeHash, $expires, $now]);
 }
 

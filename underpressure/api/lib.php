@@ -84,7 +84,52 @@ function send_mail(string $to, string $subject, string $text, array $attachments
         }
         $body .= "--$b--\r\n";
     }
+    if (($c['mail_mode'] ?? 'mail') === 'smtp') return smtp_send($to, $subj, $headers, $body);
     return mail($to, $subj, $body, $headers, '-f' . $from);
+}
+
+/** Invio tramite server SMTP autenticato (porta 465 SSL o 587 STARTTLS). */
+function smtp_send(string $to, string $subj, string $headers, string $body): bool {
+    $c = cfg();
+    $host = $c['smtp_host']; $port = (int)($c['smtp_port'] ?? 465); $secure = $c['smtp_secure'] ?? 'ssl';
+    $fp = @stream_socket_client(($secure === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port, $errno, $errstr, 20);
+    if (!$fp) { error_log("UnderPressure SMTP: connessione fallita $errstr"); return false; }
+    stream_set_timeout($fp, 20);
+    $read = function () use ($fp) { $r = ''; while (($l = fgets($fp, 1024)) !== false) { $r .= $l; if (strlen($l) < 4 || $l[3] === ' ') break; } return $r; };
+    $cmd = function (string $line, array $ok) use ($fp, $read) {
+        if ($line !== '') fwrite($fp, $line . "\r\n");
+        $r = $read();
+        if (!in_array((int)substr($r, 0, 3), $ok, true)) throw new RuntimeException(trim($r));
+        return $r;
+    };
+    try {
+        $cmd('', [220]);
+        $me = $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $cmd("EHLO $me", [250]);
+        if ($secure === 'tls') {
+            $cmd('STARTTLS', [220]);
+            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) throw new RuntimeException('STARTTLS non riuscito');
+            $cmd("EHLO $me", [250]);
+        }
+        if (!empty($c['smtp_user'])) {
+            $cmd('AUTH LOGIN', [334]);
+            $cmd(base64_encode($c['smtp_user']), [334]);
+            $cmd(base64_encode($c['smtp_pass']), [235]);
+        }
+        $cmd('MAIL FROM:<' . header_safe($c['mail_from']) . '>', [250]);
+        $cmd('RCPT TO:<' . header_safe($to) . '>', [250, 251]);
+        $cmd('DATA', [354]);
+        $msg = "To: <$to>\r\nSubject: $subj\r\nDate: " . date('r') . "\r\nMessage-ID: <" . bin2hex(random_bytes(8)) . '@' . substr(strrchr($c['mail_from'], '@'), 1) . ">\r\n" . $headers . "\r\n" . $body;
+        $msg = preg_replace('/^\./m', '..', str_replace("\r\n", "\n", $msg));
+        $cmd(str_replace("\n", "\r\n", $msg) . "\r\n.", [250]);
+        $cmd('QUIT', [221]);
+        fclose($fp);
+        return true;
+    } catch (RuntimeException $e) {
+        error_log('UnderPressure SMTP: ' . $e->getMessage());
+        fclose($fp);
+        return false;
+    }
 }
 
 function hash_token(string $t): string { return hash('sha256', $t); }

@@ -12,7 +12,9 @@ PWA che legge il display del misuratore di pressione **LAICA BM2301** da una fot
 | Riconoscimento | Offline sul telefono, motore scritto ad hoc per il display a 7 segmenti (`js/ocr.js`). Se la lettura fallisce si chiede di rifare la foto |
 | Dati | Misure, profili e schede salute solo sul telefono (IndexedDB). Sul server solo nome ed email dei registrati |
 | Data e ora | Quelle del telefono al momento del salvataggio |
-| Backup | Via email tramite PHP `mail()`: il server riceve il file, lo spedisce e non lo conserva. Ripristino da file JSON o CSV |
+| Database | MySQL `entratad77228` (condiviso): tutte le tabelle con prefisso `underpressure_` |
+| Configurazione | `api/config.php` compilato offline dall'utente a partire da `config.example.php`, caricato a mano |
+| Backup | Via email tramite PHP `mail()` oppure SMTP autenticato (scelta in `config.php`): il server riceve il file, lo spedisce e non lo conserva. Ripristino da file JSON o CSV |
 | Esportazione | A scelta: PDF per il medico, CSV (separatore `;`, si apre in Excel), backup JSON completo |
 | Grafica | Palette "acqua e rosa" (primario #3F8394, accento #D4848F, fondo #F3F7F7), tema chiaro/scuro con interruttore, logo cuore + tracciato |
 | Classificazione | Linee guida ESH 2023; obiettivo domiciliare 135/85, 130/80 con diabete o malattie renali/cardiache, oppure soglie indicate dal medico |
@@ -20,7 +22,7 @@ PWA che legge il display del misuratore di pressione **LAICA BM2301** da una fot
 ## Struttura
 ```
 underpressure/            cartella da caricare su Tophost
-  index.html, manifest.webmanifest, sw.js, setup.php
+  index.html, manifest.webmanifest, sw.js
   css/app.css
   js/app.js        interfaccia (hash routing: home, scan, diario, grafici, esporta, profili, info)
   js/ocr.js        riconoscimento del display
@@ -30,6 +32,7 @@ underpressure/            cartella da caricare su Tophost
   js/exporter.js   CSV, PDF, JSON, ripristino
   js/info.js       guida tratta dal libretto del BM2301
   api/             register.php, verify.php, backup.php, lib.php, database.sql, config.example.php
+sql/entratad77228.sql     tabella da importare con phpMyAdmin
 tests/ocr-test.mjs        test del riconoscimento su una cartella di foto
 build-zip.sh              crea dist/underpressure.zip
 ```
@@ -58,7 +61,6 @@ L'utente vede sempre i valori prima di salvare, può correggerli e può spostare
 - [x] Registrazione con codice via email, backup via email, ripristino da file
 - [x] Pagina Info con le procedure del libretto (cambio profilo, data e ora, misura corretta, memoria, simboli)
 - [x] PWA installabile e offline, avviso "Nuova versione disponibile"
-- [x] `setup.php` per configurare database e mittente dal browser dopo il caricamento
 - [ ] Riconoscimento dell'icona di battito irregolare dal display
 - [ ] Promemoria per la misura quotidiana
 
@@ -69,3 +71,5 @@ L'utente vede sempre i valori prima di salvare, può correggerli e può spostare
 - Motore di riconoscimento: 18 foto su 19 corrette; i profili sono corretti in tutte. L'unica errata è una foto molto inclinata in cui il bordo destro del display viene tagliato: l'app chiede di rifarla o di sistemare gli angoli.
 - Problemi risolti: cifre "1" delle centinaia attaccate alle decine (ora lette come cella stretta a parte); residui della cornice scambiati per cifre; ciclo infinito con fascia vuota; ricarica della pagina al primo avvio del service worker; barra "nuova versione" sempre visibile (`[hidden]` sovrascritto dal CSS).
 - API PHP provate in locale con MariaDB: registrazione, verifica codice (errato/corretto), backup con 2 allegati, token non valido.
+- Su richiesta: tabelle con prefisso `underpressure_` (database condiviso `entratad77228`), file SQL dedicato, `config.example.php` con impostazioni email (`mail()` o SMTP). Tolta la pagina `setup.php`: la configurazione si compila offline e si carica a mano, così non resta una pagina di installazione esposta.
+- Aggiunto invio SMTP (SSL 465 o STARTTLS 587) senza librerie esterne; provato in locale con un server SMTP finto senza cifratura.

@@ -1,6 +1,6 @@
 -- Tabella utenti di UnderPressure: contiene solo nome ed email (nessun dato sanitario).
 -- Importala da phpMyAdmin nel database indicato in config.php.
-CREATE TABLE IF NOT EXISTS up_users (
+CREATE TABLE IF NOT EXISTS underpressure_users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(60) NOT NULL,
   email VARCHAR(120) NOT NULL UNIQUE,
