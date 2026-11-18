@@ -180,3 +180,21 @@ main { max-width: 640px; margin: 0 auto; padding: 8px max(16px, env(safe-area-in
 .pico.p1 { background: #3F8394; opacity: 1; } .pico.p2 { background: #D4848F; opacity: 1; } .pico.p3 { background: #D9AE3F; opacity: 1; } .pico.p4 { background: #7E86C4; opacity: 1; }
 .pchip.on .pico { box-shadow: 0 0 0 2px var(--color-primary-ink); }
 .seg label { position: relative; }
+/* obiettivo personale e scheda salute */
+.tgt { grid-column: 1 / -1; font-size: .78rem; font-weight: 700; color: var(--color-muted); }
+.tgt.over, .tgtline.over b { color: var(--c-high2); }
+.tgt.ok, .tgtline.ok b { color: var(--c-ok); }
+.tgt.under, .tgtline.under b { color: var(--c-warn); }
+.tgtline { margin: 0; }
+.target { background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface)); border-radius: 14px; padding: 14px 16px; }
+.target .tval { font-size: 1.3rem; margin: 2px 0; }
+.target .tval b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.target ul { padding-left: 1.1rem; margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.check span small { display: block; color: var(--color-muted); font-size: .82rem; }
+.hhead { display: flex; align-items: center; gap: 10px; padding: 14px 14px 0; }
+.hcard { padding-bottom: 12px; }
+.hcard > form, .hcard > p, .hcard > .row { padding: 0 14px; margin-top: 8px; margin-bottom: 0; }
+.inline { display: flex; gap: 8px; }
+.inline input { flex: 1; min-width: 0; }
+#hp { min-height: 44px; border-radius: 12px; border: 2px solid var(--color-line); background: var(--color-bg); padding: 6px 10px; max-width: 55%; }
+.hero { order: -2; } .card.prompt { order: -1; box-shadow: inset 0 0 0 2px var(--color-accent); }
